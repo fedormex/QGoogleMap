@@ -7,7 +7,7 @@ while true; do
   r1=$(( ( RANDOM % 10 ) ))
   r2=$(( ( RANDOM % 10 ) ))
   for i in {1..10}; do
-    echo "GPS 35.3696$x -75.5014$y 1$z 0.$r1$r2"
+    echo "GPS 1.3000$x 103.8500$y 1$z 0.$r1$r2"
     sleep 0.1
   done
 done
