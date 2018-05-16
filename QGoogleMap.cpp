@@ -1,7 +1,7 @@
 #include "QGoogleMap.h"
 
 const int     CACHE_SIZE_MAX  = 500;  // maximum number of chunks
-const int     ZOOM_MAX        = 18;   // maximum zoom value
+const int     ZOOM_MAX        = 19;   // maximum zoom value
 const int     ZOOM_MIN        = 10;   // minimum zoom value
 const double  EPSILON         = 1e-8;
 
