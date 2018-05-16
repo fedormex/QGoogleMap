@@ -1,0 +1,9 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource>
+    <file>icons/adjust_mode_off.png</file>
+    <file>icons/adjust_mode_on.png</file>
+    <file>icons/zoom_in.png</file>
+    <file>icons/zoom_out.png</file>
+  </qresource>
+</RCC>
