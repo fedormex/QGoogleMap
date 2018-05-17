@@ -1,7 +1,7 @@
 #include "QGoogleMap.h"
 
 const int     CACHE_SIZE_MAX  = 500;  // maximum number of chunks
-const int     ZOOM_MAX        = 18;   // maximum zoom value
+const int     ZOOM_MAX        = 19;   // maximum zoom value
 const int     ZOOM_MIN        = 10;   // minimum zoom value
 const double  EPSILON         = 1e-8;
 
@@ -585,7 +585,7 @@ void QGoogleMap::onReadLine(QString line)
     setTarget(latitude, longitude, accuracy);
     
     QString text;
-    text += QString("Latency   : %1\n").arg(latency,  0, 'f', 3);
+    text += QString("Latency   : %1\n").arg(latency,   0, 'f', 3);
     text += QString("Latitude  : %1\n").arg(latitude,  0, 'f', 6);
     text += QString("Longitude : %1\n").arg(longitude, 0, 'f', 6);
     text += QString("Altitude  : %1\n").arg(altitude,  0, 'f', 2);
