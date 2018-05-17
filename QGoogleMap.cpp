@@ -1,7 +1,7 @@
 #include "QGoogleMap.h"
 
 const int     CACHE_SIZE_MAX  = 500;  // maximum number of chunks
-const int     ZOOM_MAX        = 19;   // maximum zoom value
+const int     ZOOM_MAX        = 18;   // maximum zoom value
 const int     ZOOM_MIN        = 10;   // minimum zoom value
 const double  EPSILON         = 1e-8;
 
@@ -50,8 +50,8 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   , mMapType         ( "roadmap" )
   , mMapZoom         ( ZOOM_MAX  )
   , mDegLength       ( DEG_LENGTH_ARRAY[mMapZoom] )
-  , mLatitude        ( 1.3000 )
-  , mLongitude       ( 103.8500 )
+  , mLatitude        ( 55.754 )
+  , mLongitude       ( 37.620 )
   , mTargetLatitude  ( 0.0 )
   , mTargetLongitude ( 0.0 )
   , mTargetAccuracy  ( 0.0 )
@@ -76,23 +76,23 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   mReader->start();
   
   mZoomInButton = new QToolButton(this);
-  mZoomInButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 25px;");
+  mZoomInButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 30px;");
   mZoomInButton->setIcon(QIcon(":/icons/zoom_in"));
-  mZoomInButton->setFixedSize(50, 50);
+  mZoomInButton->setFixedSize(60, 60);
   mZoomInButton->setEnabled(mMapZoom < ZOOM_MAX);
   connect(mZoomInButton, SIGNAL(clicked()), this, SLOT(onZoomIn()));
   
   mZoomOutButton = new QToolButton(this);
-  mZoomOutButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 25px;");
+  mZoomOutButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 30px;");
   mZoomOutButton->setIcon(QIcon(":/icons/zoom_out"));
-  mZoomOutButton->setFixedSize(50, 50);
+  mZoomOutButton->setFixedSize(60, 60);
   mZoomOutButton->setEnabled(mMapZoom > ZOOM_MIN);
   connect(mZoomOutButton, SIGNAL(clicked()), this, SLOT(onZoomOut()));
   
   mAdjustButton = new QToolButton(this);
-  mAdjustButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 25px; ");
+  mAdjustButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 30px; ");
   mAdjustButton->setIcon(mAdjustMode ? QIcon(":/icons/adjust_mode_on") : QIcon(":/icons/adjust_mode_off"));
-  mAdjustButton->setFixedSize(50, 50);
+  mAdjustButton->setFixedSize(60, 60);
   connect(mAdjustButton, SIGNAL(clicked()), this, SLOT(onAdjustModeToggle()));
 }
 
@@ -103,6 +103,12 @@ void QGoogleMap::setTarget(double latitude, double longitude, double accuracy)
   mTargetAccuracy  = accuracy;
   
   refresh();
+  update();
+}
+
+void QGoogleMap::setInfoText(const QString& text)
+{
+  mInfoText = text;
   update();
 }
 
@@ -219,6 +225,30 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
       p.setBrush ( QColor(255, 0, 0, 160) );
       p.drawEllipse(QPoint(px, py), radiusMin, radiusMin);
     }
+  }
+  
+  // Drawing info panel
+  if (!mInfoText.isEmpty())
+  {
+    QStringList lines = mInfoText.split("\n");
+    
+    QFont fixedFont = font();
+    fixedFont.setFamily("Courier New");
+    p.setFont(fixedFont);
+    
+    QFontMetrics fm(p.font());
+    int fh = fm.height();
+    int rh = lines.size() * (fh + 1);
+    int rw = 0;
+    
+    for(int i = 0; i < lines.size(); ++i)
+      rw = qMax(rw, fm.width(lines[i]) + 10);
+    
+    p.fillRect(0, 0, rw, rh, QColor(255, 255, 255, 200));
+    
+    p.setPen(QColor(Qt::black));
+    for(int i = 0; i < lines.size(); ++i)
+      p.drawText(5, (i + 1) * (fh + 1), lines[i]);
   }
   
   p.end();
@@ -521,12 +551,41 @@ void QGoogleMap::onRequestTimeout(QObject* reply)
 void QGoogleMap::onReadLine(QString line)
 {
   QStringList parts = line.split(" ");
-  if (parts.size() == 5 && parts[0] == "GPS")
+  if (parts.size() == 17)
   {
-    double latitude  = parts[1].toDouble();
-    double longitude = parts[2].toDouble();
-    double accuracy  = parts[4].toDouble();
+    // Line format:
+    // time gx gy gz ax ay az odo_count odo_speed gps_count lat lon alt acc gprmc_count vel dir
+    
+    double gx = parts[1].toDouble();
+    double gy = parts[2].toDouble();
+    double gz = parts[3].toDouble();
+    double ax = parts[4].toDouble();
+    double ay = parts[5].toDouble();
+    double az = parts[6].toDouble();
+    
+    double odometer = parts[8].toDouble();
+    
+    double latitude  = parts[10].toDouble();
+    double longitude = parts[11].toDouble();
+    double altitude  = parts[12].toDouble();
+    double accuracy  = parts[13].toDouble();
+    
+    double velocity  = parts[15].toDouble();
+    double direction = parts[16].toDouble();
+    
     setTarget(latitude, longitude, accuracy);
+    
+    QString text;
+    text += QString("Latitude:  %1\n").arg(latitude,  0, 'f', 6);
+    text += QString("Longitude: %1\n").arg(longitude, 0, 'f', 6);
+    text += QString("Altitude:  %1\n").arg(altitude,  0, 'f', 2);
+    text += QString("Accuracy:  %1\n").arg(accuracy,  0, 'f', 2);
+    text += QString("Velocity:  %1\n").arg(velocity,  0, 'f', 2);
+    text += QString("Direction: %1\n").arg(direction, 0, 'f', 2);
+    text += QString("Odometer:  %1\n").arg(odometer,  0, 'f', 2);
+    text += QString("Accel:     %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
+    text += QString("Gyro:      %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
+    setInfoText(text);
   }
 }
 

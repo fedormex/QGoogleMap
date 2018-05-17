@@ -41,6 +41,7 @@ class QGoogleMap: public QWidget
     
     bool hasTarget()const;
     void setTarget(double latitude, double longitude, double accuracy);
+    void setInfoText(const QString& text);
     void cancelTarget();
     
   protected:
@@ -78,6 +79,7 @@ class QGoogleMap: public QWidget
     double                  mTargetAccuracy;    // Target accuracy
     bool                    mAdjustMode;        // Adjust mode
     QDateTime               mAdjustTime;        // Adjust time
+    QString                 mInfoText;
     
     QPoint                  mCursorPos;
     StdinReader*            mReader;
