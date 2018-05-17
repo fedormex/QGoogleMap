@@ -548,6 +548,13 @@ void QGoogleMap::onRequestTimeout(QObject* reply)
   dynamic_cast<QNetworkReply*>(reply)->abort();
 }
 
+static double getTimeStamp()
+{
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
 void QGoogleMap::onReadLine(QString line)
 {
   QStringList parts = line.split(" ");
@@ -555,6 +562,8 @@ void QGoogleMap::onReadLine(QString line)
   {
     // Line format:
     // time gx gy gz ax ay az odo_count odo_speed gps_count lat lon alt acc gprmc_count vel dir
+    double timestamp = parts[0].toDouble();
+    double latency   = getTimeStamp() - timestamp;
     
     double gx = parts[1].toDouble();
     double gy = parts[2].toDouble();
@@ -576,18 +585,19 @@ void QGoogleMap::onReadLine(QString line)
     setTarget(latitude, longitude, accuracy);
     
     QString text;
-    text += QString("Latitude:  %1\n").arg(latitude,  0, 'f', 6);
-    text += QString("Longitude: %1\n").arg(longitude, 0, 'f', 6);
-    text += QString("Altitude:  %1\n").arg(altitude,  0, 'f', 2);
-    text += QString("Accuracy:  %1\n").arg(accuracy,  0, 'f', 2);
-    text += QString("Velocity:  %1\n").arg(velocity,  0, 'f', 2);
-    text += QString("Direction: %1\n").arg(direction, 0, 'f', 2);
-    text += QString("Odometer:  %1\n").arg(odometer,  0, 'f', 2);
-    text += QString("Accel:     %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
-    text += QString("Gyro:      %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
+    text += QString("Latency   : %1\n").arg(latency,  0, 'f', 3);
+    text += QString("Latitude  : %1\n").arg(latitude,  0, 'f', 6);
+    text += QString("Longitude : %1\n").arg(longitude, 0, 'f', 6);
+    text += QString("Altitude  : %1\n").arg(altitude,  0, 'f', 2);
+    text += QString("Accuracy  : %1\n").arg(accuracy,  0, 'f', 2);
+    text += QString("Velocity  : %1\n").arg(velocity,  0, 'f', 2);
+    text += QString("Direction : %1\n").arg(direction, 0, 'f', 2);
+    text += QString("Odometer  : %1\n").arg(odometer,  0, 'f', 2);
+    text += QString("Accel     : %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
+    text += QString("Gyro      : %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
     setInfoText(text);
     
-    qDebug() << text;
+    qDebug() << qPrintable(text) << "\n";
   }
 }
 
