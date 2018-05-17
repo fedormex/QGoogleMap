@@ -586,6 +586,8 @@ void QGoogleMap::onReadLine(QString line)
     text += QString("Accel:     %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
     text += QString("Gyro:      %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
     setInfoText(text);
+    
+    qDebug() << text;
   }
 }
 
