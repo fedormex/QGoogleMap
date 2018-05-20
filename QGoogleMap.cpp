@@ -97,7 +97,7 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   connect(mAdjustButton, SIGNAL(clicked()), this, SLOT(onAdjustModeToggle()));
 }
 
-void QGoogleMap::setTarget(double latitude, double longitude, double accuracy)
+void QGoogleMap::setTarget(double latitude, double longitude, double accuracy, double azimuth)
 {
   if (hasTarget())
   {
@@ -109,6 +109,7 @@ void QGoogleMap::setTarget(double latitude, double longitude, double accuracy)
   mTargetLatitude  = latitude;
   mTargetLongitude = longitude;
   mTargetAccuracy  = accuracy;
+  mTargetAzimuth   = azimuth;
   
   refresh();
   update();
@@ -230,9 +231,26 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
       p.setBrush ( QColor(255, 0, 0, 80) );
       p.drawEllipse(QPoint(px, py), radius, radius);
       
-      p.setPen   ( QColor(255, 0, 0, 160) );
-      p.setBrush ( QColor(255, 0, 0, 160) );
-      p.drawEllipse(QPoint(px, py), radiusMin, radiusMin);
+      //p.setPen   ( QColor(255, 0, 0, 160) );
+      //p.setBrush ( QColor(255, 0, 0, 160) );
+      //p.drawEllipse(QPoint(px, py), radiusMin, radiusMin);
+      
+      double alpha = mTargetAzimuth * M_PI / 180;
+      double sinA  = sin(alpha);
+      double cosA  = cos(alpha);
+      
+      QPointF P(px, py);
+      QPointF Q(px + radius * sinA, py - radius * cosA);
+      QPointF R(px - radius * cosA * 0.66 - radius * sinA * 0.25, py - radius * sinA * 0.66 + radius * cosA * 0.25);
+      QPointF S(px + radius * cosA * 0.66 - radius * sinA * 0.25, py + radius * sinA * 0.66 + radius * cosA * 0.25);
+      
+      QPainterPath path;
+      path.moveTo(Q);
+      path.lineTo(R);
+      path.lineTo(P);
+      path.lineTo(S);
+      path.lineTo(Q);
+      p.fillPath(path, QBrush(QColor(255, 0, 0, 160)));
     }
     
     p.setPen ( QColor(255, 0, 0, 255) );
@@ -244,7 +262,7 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
       double dy = mTargetHistory[i].first  - mLatitude;
       qint64 px = width()  / 2 + (qint64)round(dx * mDegLength);
       qint64 py = height() / 2 - (qint64)round(dy * mDegLength * LATITUDE_COEF);
-      p.drawEllipse(QPoint(px, py), 2, 2);
+      p.drawEllipse(QPoint(px, py), 1, 1);
     }
   }
   
@@ -604,20 +622,20 @@ void QGoogleMap::onReadLine(QString line)
     double velocity  = parts[15].toDouble();
     double direction = parts[16].toDouble();
     
-    setTarget(latitude, longitude, accuracy);
+    setTarget(latitude, longitude, accuracy, direction);
     
     QString text;
-    text += QString("Latency    : %1\n").arg(latency,   0, 'f', 3);
-    text += QString("Latitude   : %1\n").arg(latitude,  0, 'f', 6);
-    text += QString("Longitude  : %1\n").arg(longitude, 0, 'f', 6);
-    text += QString("Altitude   : %1\n").arg(altitude,  0, 'f', 2);
-    text += QString("Accuracy   : %1\n").arg(accuracy,  0, 'f', 2);
-    text += QString("Velocity   : %1\n").arg(velocity,  0, 'f', 2);
-    text += QString("Direction  : %1\n").arg(direction, 0, 'f', 2);
-    text += QString("Odometer   : %1\n").arg(odometer,  0, 'f', 2);
+    text += QString("Latency    : %1\n").arg(latency,    0, 'f', 3);
+    text += QString("Latitude   : %1\n").arg(latitude,   0, 'f', 6);
+    text += QString("Longitude  : %1\n").arg(longitude,  0, 'f', 6);
+    text += QString("Altitude   : %1\n").arg(altitude,   0, 'f', 2);
+    text += QString("Accuracy   : %1\n").arg(accuracy,   0, 'f', 2);
+    text += QString("Velocity   : %1\n").arg(velocity,   0, 'f', 2);
+    text += QString("Direction  : %1\n").arg(direction,  0, 'f', 2);
+    text += QString("Odometer   : %1\n").arg(odometer,   0, 'f', 2);
     text += QString("Accel      : %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
     text += QString("Gyro       : %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
-
+    
     QMap<QString,QString> addressMap;
     QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
     for(int i = 0; i < interfaces.size(); ++i)
@@ -628,7 +646,7 @@ void QGoogleMap::onReadLine(QString line)
           addressMap[interfaces[i].name()] = addresses[j].ip().toString();
     }
     
-    text += QString("IP address : %1").arg(addressMap.value("wlan0"));
+    text += QString("IP address : %1\n").arg(addressMap.value("wlan0"));
     setInfoText(text);
     
     //qDebug() << qPrintable(text) << "\n";
