@@ -1,8 +1,9 @@
 #include "QGoogleMap.h"
 
-const int     CACHE_SIZE_MAX  = 500;  // maximum number of chunks
-const int     ZOOM_MAX        = 19;   // maximum zoom value
-const int     ZOOM_MIN        = 10;   // minimum zoom value
+const int     CACHE_SIZE_MAX  = 500;    // maximum number of chunks
+const int     HISTORY_SIZE    = 1000;   // maximum history (track) size
+const int     ZOOM_MAX        = 19;     // maximum zoom value
+const int     ZOOM_MIN        = 10;     // minimum zoom value
 const double  EPSILON         = 1e-8;
 
 const double DEG_LENGTH_ARRAY[] = {
@@ -48,10 +49,10 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   : QWidget          ( parent )
   , mApiKey          ( apiKey )
   , mMapType         ( "roadmap" )
-  , mMapZoom         ( ZOOM_MAX  )
+  , mMapZoom         ( 18  )
   , mDegLength       ( DEG_LENGTH_ARRAY[mMapZoom] )
-  , mLatitude        ( 55.754 )
-  , mLongitude       ( 37.620 )
+  , mLatitude        ( 42.531  )
+  , mLongitude       ( -71.149 )
   , mTargetLatitude  ( 0.0 )
   , mTargetLongitude ( 0.0 )
   , mTargetAccuracy  ( 0.0 )
@@ -98,6 +99,13 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
 
 void QGoogleMap::setTarget(double latitude, double longitude, double accuracy)
 {
+  if (hasTarget())
+  {
+    mTargetHistory.append(qMakePair(mTargetLatitude, mTargetLongitude));
+    if (mTargetHistory.size() > HISTORY_SIZE)
+      mTargetHistory.removeFirst();
+  }
+  
   mTargetLatitude  = latitude;
   mTargetLongitude = longitude;
   mTargetAccuracy  = accuracy;
@@ -117,6 +125,7 @@ void QGoogleMap::cancelTarget()
   mTargetLatitude  = 0.0;
   mTargetLongitude = 0.0;
   mTargetAccuracy  = 0.0;
+  mTargetHistory.clear();
 }
 
 bool QGoogleMap::hasTarget()const
@@ -225,6 +234,18 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
       p.setBrush ( QColor(255, 0, 0, 160) );
       p.drawEllipse(QPoint(px, py), radiusMin, radiusMin);
     }
+    
+    p.setPen ( QColor(255, 0, 0, 255) );
+    
+    // Drawing track
+    for(int i = 0; i < mTargetHistory.size(); ++i)
+    {
+      double dx = mTargetHistory[i].second - mLongitude;
+      double dy = mTargetHistory[i].first  - mLatitude;
+      qint64 px = width()  / 2 + (qint64)round(dx * mDegLength);
+      qint64 py = height() / 2 - (qint64)round(dy * mDegLength * LATITUDE_COEF);
+      p.drawEllipse(QPoint(px, py), 2, 2);
+    }
   }
   
   // Drawing info panel
@@ -244,7 +265,8 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
     for(int i = 0; i < lines.size(); ++i)
       rw = qMax(rw, fm.width(lines[i]) + 10);
     
-    p.fillRect(0, 0, rw, rh, QColor(255, 255, 255, 200));
+    int rw1 = rw + 100 - (rw % 100);
+    p.fillRect(0, 0, rw1, rh, QColor(255, 255, 255, 128));
     
     p.setPen(QColor(Qt::black));
     for(int i = 0; i < lines.size(); ++i)
@@ -585,19 +607,31 @@ void QGoogleMap::onReadLine(QString line)
     setTarget(latitude, longitude, accuracy);
     
     QString text;
-    text += QString("Latency   : %1\n").arg(latency,   0, 'f', 3);
-    text += QString("Latitude  : %1\n").arg(latitude,  0, 'f', 6);
-    text += QString("Longitude : %1\n").arg(longitude, 0, 'f', 6);
-    text += QString("Altitude  : %1\n").arg(altitude,  0, 'f', 2);
-    text += QString("Accuracy  : %1\n").arg(accuracy,  0, 'f', 2);
-    text += QString("Velocity  : %1\n").arg(velocity,  0, 'f', 2);
-    text += QString("Direction : %1\n").arg(direction, 0, 'f', 2);
-    text += QString("Odometer  : %1\n").arg(odometer,  0, 'f', 2);
-    text += QString("Accel     : %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
-    text += QString("Gyro      : %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
+    text += QString("Latency    : %1\n").arg(latency,   0, 'f', 3);
+    text += QString("Latitude   : %1\n").arg(latitude,  0, 'f', 6);
+    text += QString("Longitude  : %1\n").arg(longitude, 0, 'f', 6);
+    text += QString("Altitude   : %1\n").arg(altitude,  0, 'f', 2);
+    text += QString("Accuracy   : %1\n").arg(accuracy,  0, 'f', 2);
+    text += QString("Velocity   : %1\n").arg(velocity,  0, 'f', 2);
+    text += QString("Direction  : %1\n").arg(direction, 0, 'f', 2);
+    text += QString("Odometer   : %1\n").arg(odometer,  0, 'f', 2);
+    text += QString("Accel      : %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
+    text += QString("Gyro       : %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
+
+    QMap<QString,QString> addressMap;
+    QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
+    for(int i = 0; i < interfaces.size(); ++i)
+    {
+      QList<QNetworkAddressEntry> addresses = interfaces[i].addressEntries();
+      for(int j = 0; j < addresses.size(); ++j)
+        if (addresses[j].ip().protocol() == QAbstractSocket::IPv4Protocol)
+          addressMap[interfaces[i].name()] = addresses[j].ip().toString();
+    }
+    
+    text += QString("IP address : %1").arg(addressMap.value("wlan0"));
     setInfoText(text);
     
-    qDebug() << qPrintable(text) << "\n";
+    //qDebug() << qPrintable(text) << "\n";
   }
 }
 

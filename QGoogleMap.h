@@ -65,30 +65,31 @@ class QGoogleMap: public QWidget
     void clearCache();
     
   private:
-    const QString           mApiKey;
-    QNetworkAccessManager*  mNetworkManager;
-    QSignalMapper*          mNetworkTimeoutSignalMapper;
+    const QString                 mApiKey;
+    QNetworkAccessManager*        mNetworkManager;
+    QSignalMapper*                mNetworkTimeoutSignalMapper;
     
-    QString                 mMapType;           // Map type: roadmap, ...
-    int                     mMapZoom;           // Current zoom level
-    double                  mDegLength;         // Number of pixels in 1 degree parallel on the current zoom level
-    double                  mLatitude;          // Center latitude
-    double                  mLongitude;         // Center longitude
-    double                  mTargetLatitude;    // Target latitude
-    double                  mTargetLongitude;   // Target longitude
-    double                  mTargetAccuracy;    // Target accuracy
-    bool                    mAdjustMode;        // Adjust mode
-    QDateTime               mAdjustTime;        // Adjust time
-    QString                 mInfoText;
+    QString                       mMapType;           // Map type: roadmap, ...
+    int                           mMapZoom;           // Current zoom level
+    double                        mDegLength;         // Number of pixels in 1 degree parallel on the current zoom level
+    double                        mLatitude;          // Center latitude
+    double                        mLongitude;         // Center longitude
+    double                        mTargetLatitude;    // Target latitude
+    double                        mTargetLongitude;   // Target longitude
+    double                        mTargetAccuracy;    // Target accuracy
+    QList<QPair<double,double> >  mTargetHistory;
+    bool                          mAdjustMode;        // Adjust mode
+    QDateTime                     mAdjustTime;        // Adjust time
+    QString                       mInfoText;
     
-    QPoint                  mCursorPos;
-    StdinReader*            mReader;
+    QPoint                        mCursorPos;
+    StdinReader*                  mReader;
     
-    QMap<QString,MapChunk>  mMapChunks;
+    QMap<QString,MapChunk>        mMapChunks;
     
-    QToolButton*            mZoomInButton;
-    QToolButton*            mZoomOutButton;
-    QToolButton*            mAdjustButton;
+    QToolButton*                  mZoomInButton;
+    QToolButton*                  mZoomOutButton;
+    QToolButton*                  mAdjustButton;
 };
 
 #endif
