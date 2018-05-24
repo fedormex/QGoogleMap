@@ -81,6 +81,7 @@ class QGoogleMap: public QWidget
     QList<QPair<double,double> >  mTargetHistory;
     bool                          mAdjustMode;        // Adjust mode
     QDateTime                     mAdjustTime;        // Adjust time
+    QDateTime                     mGpsTime;
     QString                       mInfoText;
     
     QPoint                        mCursorPos;

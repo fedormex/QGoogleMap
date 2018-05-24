@@ -64,6 +64,7 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   , mTargetAccuracy  ( 0.0 )
   , mAdjustMode      ( true )
   , mAdjustTime      ( QDateTime::currentDateTime() )
+  , mGpsTime         ( QDateTime::currentDateTime() )
 {
   mNetworkManager = new QNetworkAccessManager(this);
   connect(mNetworkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(onRequestFinished(QNetworkReply*)));
@@ -105,17 +106,17 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
 
 void QGoogleMap::setTarget(double latitude, double longitude, double accuracy, double azimuth)
 {
+  mTargetLatitude  = latitude;
+  mTargetLongitude = longitude;
+  mTargetAccuracy  = accuracy;
+  mTargetAzimuth   = azimuth;
+  
   if (hasTarget())
   {
     mTargetHistory.append(qMakePair(mTargetLatitude, mTargetLongitude));
     if (mTargetHistory.size() > HISTORY_SIZE)
       mTargetHistory.removeFirst();
   }
-  
-  mTargetLatitude  = latitude;
-  mTargetLongitude = longitude;
-  mTargetAccuracy  = accuracy;
-  mTargetAzimuth   = azimuth;
   
   refresh();
   update();
@@ -197,8 +198,12 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
 {
   const double LATITUDE_COEF = 1.0 / cos(mLatitude * M_PI / 180);
   
+  const QFont defaultFont = this->font();
+  
   QPainter p;
   p.begin(this);
+  
+  //p.setRenderHint(QPainter::Antialiasing, false);
   
   // Drawing gray background
   p.fillRect(0, 0, width(), height(), QColor(Qt::gray));
@@ -222,20 +227,46 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
   // Drawing target
   if (hasTarget())
   {
+    // Drawing track
+    
+    if (!mTargetHistory.isEmpty())
+    {
+      QPainterPath path;
+      for(int i = 0; i < mTargetHistory.size(); ++i)
+      {
+        double dx = mTargetHistory[i].second - mLongitude;
+        double dy = mTargetHistory[i].first  - mLatitude;
+        qint64 px = width()  / 2 + (qint64)round(dx * mDegLength);
+        qint64 py = height() / 2 - (qint64)round(dy * mDegLength * LATITUDE_COEF);
+        //p.drawEllipse(QPoint(px, py), 1, 1);
+        
+        if (i == 0)
+          path.moveTo(px, py);
+        else
+          path.lineTo(px, py);
+      }
+      p.setPen(QColor(255, 100, 0, 255));
+      p.drawPath(path);
+    }
+    
     double dx = mTargetLongitude - mLongitude;
     double dy = mTargetLatitude  - mLatitude;
     qint64 px = width()  / 2 + (qint64)round(dx * mDegLength);
     qint64 py = height() / 2 - (qint64)round(dy * mDegLength * LATITUDE_COEF);
     
-    int radiusMin = 10;
-    int radius    = std::max((int)round(mTargetAccuracy * 10 * LATITUDE_COEF * mDegLength / 111111.111111), radiusMin);
+    int radius  = mTargetAccuracy * 10 * LATITUDE_COEF * mDegLength / 111111.111111; // External radius: navigation-determined, transparent
+    int radius1 = 25;                                                                // Internal radius: fixed, solid
     
     if (px >= -100 && px < width()  + 100 &&
         py >= -100 && py < height() + 100)
     {
-      p.setPen   ( QColor(255, 0, 0, 80) );
-      p.setBrush ( QColor(255, 0, 0, 80) );
-      p.drawEllipse(QPoint(px, py), radius, radius);
+      p.setPen   ( QColor(255, 100, 0, 80) );
+      p.setBrush ( QColor(255, 100, 0, 80) );
+      p.drawEllipse(QPoint(px, py), radius,  radius);
+      
+      p.setPen   ( QColor(255, 100, 0, 255) );
+      p.setBrush ( QColor(255, 100, 0, 255) );
+      p.drawEllipse(QPoint(px, py), radius1, radius1);
       
       //p.setPen   ( QColor(255, 0, 0, 160) );
       //p.setBrush ( QColor(255, 0, 0, 160) );
@@ -245,30 +276,23 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
       double sinA  = sin(alpha);
       double cosA  = cos(alpha);
       
-      QPointF P(px, py);
-      QPointF Q(px + radius * sinA, py - radius * cosA);
-      QPointF R(px - radius * cosA * 0.66 - radius * sinA * 0.25, py - radius * sinA * 0.66 + radius * cosA * 0.25);
-      QPointF S(px + radius * cosA * 0.66 - radius * sinA * 0.25, py + radius * sinA * 0.66 + radius * cosA * 0.25);
+      //QPointF P(px, py);
+      //QPointF Q(px + radius * sinA, py - radius * cosA);
+      //QPointF R(px - radius * cosA * 0.66 - radius * sinA * 0.25, py - radius * sinA * 0.66 + radius * cosA * 0.25);
+      //QPointF S(px + radius * cosA * 0.66 - radius * sinA * 0.25, py + radius * sinA * 0.66 + radius * cosA * 0.25);
       
+      QPointF P(px - radius1 * sinA * 0.22, py + radius1 * cosA * 0.22);
+      QPointF Q(px + radius1 * sinA * 0.55, py - radius1 * cosA * 0.55);
+      QPointF R(px + radius1 * cosA * 0.44 - radius1 * sinA * 0.55, py + radius1 * sinA * 0.44 + radius1 * cosA * 0.55);
+      QPointF S(px - radius1 * cosA * 0.44 - radius1 * sinA * 0.55, py - radius1 * sinA * 0.44 + radius1 * cosA * 0.55);
+    
       QPainterPath path;
       path.moveTo(Q);
       path.lineTo(R);
       path.lineTo(P);
       path.lineTo(S);
       path.lineTo(Q);
-      p.fillPath(path, QBrush(QColor(255, 0, 0, 160)));
-    }
-    
-    p.setPen ( QColor(255, 0, 0, 255) );
-    
-    // Drawing track
-    for(int i = 0; i < mTargetHistory.size(); ++i)
-    {
-      double dx = mTargetHistory[i].second - mLongitude;
-      double dy = mTargetHistory[i].first  - mLatitude;
-      qint64 px = width()  / 2 + (qint64)round(dx * mDegLength);
-      qint64 py = height() / 2 - (qint64)round(dy * mDegLength * LATITUDE_COEF);
-      p.drawEllipse(QPoint(px, py), 1, 1);
+      p.fillPath(path, QBrush(QColor(255, 255, 255, 255)));
     }
   }
   
@@ -277,7 +301,7 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
   {
     QStringList lines = mInfoText.split("\n");
     
-    QFont fixedFont = font();
+    QFont fixedFont = defaultFont;
     fixedFont.setFamily("Courier New");
     p.setFont(fixedFont);
     
@@ -289,12 +313,72 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
     for(int i = 0; i < lines.size(); ++i)
       rw = qMax(rw, fm.width(lines[i]) + 10);
     
-    int rw1 = rw + 100 - (rw % 100);
+    int rw1 = rw + 50 - (rw % 50);
     p.fillRect(0, 0, rw1, rh, QColor(255, 255, 255, 128));
     
     p.setPen(QColor(Qt::black));
     for(int i = 0; i < lines.size(); ++i)
       p.drawText(5, (i + 1) * (fh + 1), lines[i]);
+  }
+  
+  // Drawing scale
+  if (true)
+  {
+    const int minLen  = 100;  // minimum scale length
+    const int padding = 10;   // padding from the bottom-left corner of the widget
+    const double a = 40000000 / LATITUDE_COEF / 360 / mDegLength; // number of meters in 1 pixel
+    
+    QList<double> scales;
+    scales << 1e0 << 2e0 << 5e0
+           << 1e1 << 2e1 << 5e1
+           << 1e2 << 2e2 << 5e2
+           << 1e3 << 2e3 << 5e3
+           << 1e4 << 2e4 << 5e4
+           << 1e5 << 2e5 << 5e5
+           << 1e6 << 2e6 << 5e6;
+    
+    double scale = scales.last();
+    for(int i = 0; i < scales.size(); ++i)
+      if (a * minLen < scales[i])
+      {
+        scale = scales[i];
+        break;
+      }
+    
+    // Calculating scale length in pixels
+    int pxLen = qRound(scale / a);
+    
+    p.setPen(QColor(0, 0, 0));
+    p.drawLine(padding, height() - padding, padding + pxLen, height() - padding);
+    p.drawLine(padding, height() - padding, padding, height() - padding - 5);
+    p.drawLine(padding + pxLen / 2, height() - padding, padding + pxLen / 2, height() - padding - 5);
+    p.drawLine(padding + pxLen, height() - padding, padding + pxLen, height() - padding - 5);
+    
+    QString text0, text1, text2;
+    if (scale < 1000)
+    {
+      text0 = QString("%1").arg(scale, 0, 'f', 0);
+      text1 = text0 + " m";
+      text2 = QString("%1").arg(scale/2, 0, 'f', static_cast<int>(scale) % 2);
+    }
+    else
+    {
+      text0 = QString("%1").arg(scale/1000, 0, 'f', 0);
+      text1 = text0 + " km";
+      text2 = QString("%1").arg(scale/2000, 0, 'f', static_cast<int>(scale/1000) % 2);
+    }
+    
+    QFont font(p.font());
+    
+    QFont scaleFont = defaultFont;
+    scaleFont.setFamily("Courier New");
+    p.setFont(scaleFont);
+    
+    QFontMetrics fm(scaleFont);
+    
+    const int textY = height() - padding - fm.height() / 2;
+    p.drawText(padding + pxLen - fm.width(text0) / 2, textY, text1);
+    p.drawText(padding + pxLen / 2 - fm.width(text2) / 2, textY, text2);
   }
   
   p.end();
@@ -603,6 +687,7 @@ static double getTimeStamp()
 
 void QGoogleMap::onReadLine(QString line)
 {
+  QDateTime timeNow = QDateTime::currentDateTime();
   QStringList parts = line.split(" ");
   if (parts.size() == 17)
   {
@@ -628,19 +713,11 @@ void QGoogleMap::onReadLine(QString line)
     double velocity  = parts[15].toDouble();
     double direction = parts[16].toDouble();
     
-    setTarget(latitude, longitude, accuracy, direction);
+    double gps_count = parts[9].toDouble();
+    if (gps_count > EPSILON)
+      mGpsTime = timeNow;
     
-    QString text;
-    text += QString("Latency    : %1\n").arg(latency,    0, 'f', 3);
-    text += QString("Latitude   : %1\n").arg(latitude,   0, 'f', 6);
-    text += QString("Longitude  : %1\n").arg(longitude,  0, 'f', 6);
-    text += QString("Altitude   : %1\n").arg(altitude,   0, 'f', 2);
-    text += QString("Accuracy   : %1\n").arg(accuracy,   0, 'f', 2);
-    text += QString("Velocity   : %1\n").arg(velocity,   0, 'f', 2);
-    text += QString("Direction  : %1\n").arg(direction,  0, 'f', 2);
-    text += QString("Odometer   : %1\n").arg(odometer,   0, 'f', 2);
-    text += QString("Accel      : %1, %2, %3\n").arg(ax, 0, 'f', 1).arg(ay, 0, 'f', 1).arg(az, 0, 'f', 1);
-    text += QString("Gyro       : %1, %2, %3\n").arg(gx, 0, 'f', 1).arg(gy, 0, 'f', 1).arg(gz, 0, 'f', 1);
+    setTarget(latitude, longitude, accuracy, direction);
     
     QMap<QString,QString> addressMap;
     QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
@@ -652,7 +729,29 @@ void QGoogleMap::onReadLine(QString line)
           addressMap[interfaces[i].name()] = addresses[j].ip().toString();
     }
     
+    QString text;
+    
     text += QString("IP address : %1\n").arg(addressMap.value("wlan0"));
+    
+    text += QString("Latency    : %1\n").arg(latency, 0, 'f', 3);
+    
+    text += QString("Location   : %1, %2, %3\n")
+              .arg(latitude,  0, 'f', 6)
+              .arg(longitude, 0, 'f', 6)
+              .arg(altitude,  0, 'f', 1);
+    
+    text += QString("Direction  : %1\n").arg(direction,  0, 'f', 2);
+    text += QString("Velocity   : %1\n").arg(velocity,   0, 'f', 2);
+    text += QString("Odometer   : %1\n").arg(odometer,   0, 'f', 2);
+    text += QString("Accel      : %1, %2, %3\n").arg(ax, 0, 'f', 0).arg(ay, 0, 'f', 0).arg(az, 0, 'f', 0);
+    text += QString("Gyro       : %1, %2, %3\n").arg(gx, 0, 'f', 0).arg(gy, 0, 'f', 0).arg(gz, 0, 'f', 0);
+    
+    qint64 gpsDelta = mGpsTime.msecsTo(timeNow);
+    if (gpsDelta < 3000)
+      text += QString("GPS        : on\n");
+    else
+      text += QString("GPS        : off (%1 sec)\n").arg(gpsDelta / 1000);
+    
     setInfoText(text);
     
     //qDebug() << qPrintable(text) << "\n";
@@ -669,11 +768,26 @@ void QGoogleMap::onAdjustModeToggle()
 int main(int argc, char** argv)
 {
   QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
-  
-  QApplication app(argc, argv);
   setlocale(LC_NUMERIC, "C");
   
-  QGoogleMap* map = new QGoogleMap("AIzaSyAuzQq_7hOhT0-HuaDrGsdzOooxRFTfcWM");
+  if (argc < 2)
+  {
+    qCritical() << "Missing api-key file";
+    return -1;
+  }
+  
+  QFile f(argv[1]);
+  if (!f.open(QIODevice::ReadOnly))
+  {
+    qCritical() << "Unable to read api-key file" << argv[1];
+    return -1;
+  }
+  QString apiKey = QString(f.readAll()).trimmed();
+  f.close();
+  
+  QApplication app(argc, argv);
+  
+  QGoogleMap* map = new QGoogleMap(apiKey);
   map->setMinimumSize(800, 480);
   map->show();
   return app.exec();
