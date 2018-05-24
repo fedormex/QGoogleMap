@@ -41,6 +41,12 @@ void StdinReader::run()
   while (true)
   {
     QString line = mStream.readLine();
+    if (line.isEmpty())
+    {
+      usleep(100000);
+      continue;
+    }
+    
     emit readLine(line);
   }
 }
