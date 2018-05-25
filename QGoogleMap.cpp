@@ -196,14 +196,20 @@ void QGoogleMap::mouseMoveEvent(QMouseEvent* event)
 
 void QGoogleMap::paintEvent(QPaintEvent* event)
 {
-  const double LATITUDE_COEF = 1.0 / cos(mLatitude * M_PI / 180);
+  const double LATITUDE_COEF        = 1.0 / cos(mLatitude * M_PI / 180);
+  const double PARALLEL_DEG_LENGTH  = 40000000.0 / 360 / LATITUDE_COEF;
   
   const QFont defaultFont = this->font();
   
   QPainter p;
   p.begin(this);
   
-  //p.setRenderHint(QPainter::Antialiasing, false);
+  p.setRenderHints(QPainter::Antialiasing |
+                   QPainter::TextAntialiasing |
+                   QPainter::SmoothPixmapTransform |
+                   QPainter::HighQualityAntialiasing |
+                   QPainter::NonCosmeticDefaultPen,
+                   true);
   
   // Drawing gray background
   p.fillRect(0, 0, width(), height(), QColor(Qt::gray));
@@ -228,7 +234,6 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
   if (hasTarget())
   {
     // Drawing track
-    
     if (!mTargetHistory.isEmpty())
     {
       QPainterPath path;
@@ -238,14 +243,12 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
         double dy = mTargetHistory[i].first  - mLatitude;
         qint64 px = width()  / 2 + (qint64)round(dx * mDegLength);
         qint64 py = height() / 2 - (qint64)round(dy * mDegLength * LATITUDE_COEF);
-        //p.drawEllipse(QPoint(px, py), 1, 1);
-        
         if (i == 0)
           path.moveTo(px, py);
         else
           path.lineTo(px, py);
       }
-      p.setPen(QColor(255, 100, 0, 255));
+      p.setPen(QPen(QBrush(QColor(255, 100, 0, 255)), 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
       p.drawPath(path);
     }
     
@@ -254,17 +257,17 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
     qint64 px = width()  / 2 + (qint64)round(dx * mDegLength);
     qint64 py = height() / 2 - (qint64)round(dy * mDegLength * LATITUDE_COEF);
     
-    int radius  = mTargetAccuracy * 10 * LATITUDE_COEF * mDegLength / 111111.111111; // External radius: navigation-determined, transparent
-    int radius1 = 25;                                                                // Internal radius: fixed, solid
+    int radius  = mTargetAccuracy * 10 * mDegLength / PARALLEL_DEG_LENGTH; // External radius: navigation-determined, transparent
+    int radius1 = 25;                                                      // Internal radius: fixed, solid
     
     if (px >= -100 && px < width()  + 100 &&
         py >= -100 && py < height() + 100)
     {
-      p.setPen   ( QColor(255, 100, 0, 80) );
+      p.setPen   ( QColor(255, 100, 0, 0) );
       p.setBrush ( QColor(255, 100, 0, 80) );
       p.drawEllipse(QPoint(px, py), radius,  radius);
       
-      p.setPen   ( QColor(255, 100, 0, 255) );
+      p.setPen   ( QColor(255, 100, 0, 0) );
       p.setBrush ( QColor(255, 100, 0, 255) );
       p.drawEllipse(QPoint(px, py), radius1, radius1);
       
@@ -326,7 +329,7 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
   {
     const int minLen  = 100;  // minimum scale length
     const int padding = 10;   // padding from the bottom-left corner of the widget
-    const double a = 40000000 / LATITUDE_COEF / 360 / mDegLength; // number of meters in 1 pixel
+    const double a = PARALLEL_DEG_LENGTH / mDegLength; // number of meters in 1 pixel
     
     QList<double> scales;
     scales << 1e0 << 2e0 << 5e0
