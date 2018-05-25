@@ -332,13 +332,13 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
     const double a = PARALLEL_DEG_LENGTH / mDegLength; // number of meters in 1 pixel
     
     QList<double> scales;
-    scales << 1e0 << 2e0 << 5e0
-           << 1e1 << 2e1 << 5e1
-           << 1e2 << 2e2 << 5e2
-           << 1e3 << 2e3 << 5e3
-           << 1e4 << 2e4 << 5e4
-           << 1e5 << 2e5 << 5e5
-           << 1e6 << 2e6 << 5e6;
+    scales << 1e0 << 2e0 << 3e0 << 4e0 << 5e0 << 6e0 << 7e0 << 8e0 << 9e0
+           << 1e1 << 2e1 << 3e1 << 4e1 << 5e1 << 6e1 << 7e1 << 8e1 << 9e1
+           << 1e2 << 2e2 << 3e2 << 4e2 << 5e2 << 6e2 << 7e2 << 8e2 << 9e2
+           << 1e3 << 2e3 << 3e3 << 4e3 << 5e3 << 6e3 << 7e3 << 8e3 << 9e3
+           << 1e4 << 2e4 << 3e4 << 4e4 << 5e4 << 6e4 << 7e4 << 8e4 << 9e4
+           << 1e5 << 2e5 << 3e5 << 4e5 << 5e5 << 6e5 << 7e5 << 8e5 << 9e5
+           << 1e6 << 2e6 << 3e6 << 4e6 << 5e6 << 6e6 << 7e6 << 8e6 << 9e6;
     
     double scale = scales.last();
     for(int i = 0; i < scales.size(); ++i)
