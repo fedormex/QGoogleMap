@@ -236,6 +236,7 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
     // Drawing track
     if (!mTargetHistory.isEmpty())
     {
+      qDebug() << mTargetHistory.size();
       QPainterPath path;
       for(int i = 0; i < mTargetHistory.size(); ++i)
       {
@@ -248,7 +249,7 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
         else
           path.lineTo(px, py);
       }
-      p.setPen(QPen(QBrush(QColor(255, 100, 0, 255)), 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+      p.setPen(QColor(255, 100, 0, 255));
       p.drawPath(path);
     }
     
