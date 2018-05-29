@@ -1,3 +1,6 @@
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include "QGoogleMap.h"
 
 const int     CACHE_SIZE_MAX  = 500;    // maximum number of chunks
@@ -54,6 +57,7 @@ void StdinReader::run()
 QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   : QWidget          ( parent )
   , mApiKey          ( apiKey )
+  , mCacheDir        ( "/var/tmp/QGoogleMap" )
   , mMapType         ( "roadmap" )
   , mMapZoom         ( 18  )
   , mDegLength       ( DEG_LENGTH_ARRAY[mMapZoom] )
@@ -66,6 +70,8 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   , mAdjustTime      ( QDateTime::currentDateTime() )
   , mGpsTime         ( QDateTime::currentDateTime() )
 {
+  mkdir(qPrintable(mCacheDir), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  
   mNetworkManager = new QNetworkAccessManager(this);
   connect(mNetworkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(onRequestFinished(QNetworkReply*)));
   
@@ -603,8 +609,33 @@ void QGoogleMap::requestMap(double lat, double lon, int zoom)
   hash = hash.arg(zoom);
   hash = hash.arg(lat, 0, 'f', 6);
   hash = hash.arg(lon, 0, 'f', 6);
-  qDebug() << "Requesting " << hash << ", cached: " << mMapChunks.size();
   
+  if (mMapChunks.contains(hash))
+    return;
+  
+  // Requesting cache storage
+  QString fileName("%1/%2-%3.png");
+  fileName = fileName.arg(mCacheDir);
+  fileName = fileName.arg(mMapType);
+  fileName = fileName.arg(hash);
+  
+  QImage image;
+  if (image.load(fileName))
+  {
+    MapChunk chunk;
+    chunk.type = mMapType;
+    chunk.zoom = zoom;
+    chunk.latitude  = lat;
+    chunk.longitude = lon;
+    chunk.image = image.copy(0, 40, image.width(), image.height() - 80);
+    mMapChunks[hash] = chunk;
+    update();
+    return;
+  }
+  
+  mMapChunks.insert(hash, MapChunk());
+  
+  // Requesting google api service
   QString url("https://maps.googleapis.com/maps/api/staticmap?center=%1,%2&zoom=%3&size=640x640&maptype=%4&key=%5");
   url = url.arg(lat, 0, 'f', 6);
   url = url.arg(lon, 0, 'f', 6);
@@ -612,11 +643,7 @@ void QGoogleMap::requestMap(double lat, double lon, int zoom)
   url = url.arg(mMapType);
   url = url.arg(mApiKey);
   
-  if (mMapChunks.contains(hash))
-    return;
-  
-  mMapChunks.insert(hash, MapChunk());
-  
+  qDebug() << "Requesting " << hash << ", cached: " << mMapChunks.size();
   QNetworkReply* reply = mNetworkManager->get(QNetworkRequest(QUrl(url)));
   reply->setProperty("type", QString("request_map"));
   reply->setProperty("hash", hash);
@@ -647,7 +674,22 @@ void QGoogleMap::onRequestFinished(QNetworkReply* reply)
       const int    zoom      = values[0].toInt();
       const double latitude  = values[1].toDouble();
       const double longitude = values[2].toDouble();
-      //qDebug() << hash;
+      
+      // Caching file
+      QString fileName("%1/%2-%3.png");
+      fileName = fileName.arg(mCacheDir);
+      fileName = fileName.arg(mMapType);
+      fileName = fileName.arg(hash);
+      
+      QFile f(fileName);
+      if (f.open(QIODevice::WriteOnly))
+      {
+        f.write(data);
+        f.close();
+      }
+      
+      //QDir dir(mCacheDir);
+      //QStringList fileList = dir.entryList(QDir::Files, );
       
       QImage image;
       if (image.loadFromData(data))

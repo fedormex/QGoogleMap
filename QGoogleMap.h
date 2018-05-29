@@ -66,6 +66,7 @@ class QGoogleMap: public QWidget
     
   private:
     const QString                 mApiKey;
+    const QString                 mCacheDir;
     QNetworkAccessManager*        mNetworkManager;
     QSignalMapper*                mNetworkTimeoutSignalMapper;
     
