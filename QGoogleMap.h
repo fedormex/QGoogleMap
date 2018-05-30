@@ -32,6 +32,20 @@ class StdinReader: public QThread
     QTextStream mStream;
 };
 
+class CacheCleaner: public QThread
+{
+    Q_OBJECT
+  
+  public:
+    CacheCleaner(const QString& cacheDir, QObject* parent = 0);
+    
+  protected:
+    void run();
+  
+  private:
+    const QString mCacheDir;
+};
+
 class QGoogleMap: public QWidget
 {
     Q_OBJECT
@@ -62,11 +76,13 @@ class QGoogleMap: public QWidget
     void onRequestTimeout(QObject* reply);
     void onReadLine(QString line);
     void onAdjustModeToggle();
+    void onRecordToggle();
+    void onRecordFinished();
     void clearCache();
     
   private:
     const QString                 mApiKey;
-    const QString                 mCacheDir;
+    const QString                 mHomeDir;
     QNetworkAccessManager*        mNetworkManager;
     QSignalMapper*                mNetworkTimeoutSignalMapper;
     
@@ -80,19 +96,22 @@ class QGoogleMap: public QWidget
     double                        mTargetAccuracy;    // Target accuracy
     double                        mTargetAzimuth;     // Target azimuth
     QList<QPair<double,double> >  mTargetHistory;
-    bool                          mAdjustMode;        // Adjust mode
     QDateTime                     mAdjustTime;        // Adjust time
     QDateTime                     mGpsTime;
     QString                       mInfoText;
     
     QPoint                        mCursorPos;
     StdinReader*                  mReader;
+    CacheCleaner*                 mCacheCleaner;
     
     QMap<QString,MapChunk>        mMapChunks;
     
     QToolButton*                  mZoomInButton;
     QToolButton*                  mZoomOutButton;
     QToolButton*                  mAdjustButton;
+    QToolButton*                  mRecordButton;
+    
+    QProcess*                     mRecordProcess;
 };
 
 #endif

@@ -3,6 +3,8 @@
   <qresource>
     <file>icons/adjust_mode_off.png</file>
     <file>icons/adjust_mode_on.png</file>
+    <file>icons/record_start.png</file>
+    <file>icons/record_stop.png</file>
     <file>icons/zoom_in.png</file>
     <file>icons/zoom_out.png</file>
   </qresource>

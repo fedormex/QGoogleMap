@@ -1,9 +1,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <utime.h>
+#include <signal.h>
 
 #include "QGoogleMap.h"
 
-const int     CACHE_SIZE_MAX  = 500;    // maximum number of chunks
+const int     MEM_CACHE_SIZE  = 200;    // In chunks
+const int     DISK_CACHE_SIZE = 10000;  // In chunks
 const int     HISTORY_SIZE    = 1000;   // maximum history (track) size
 const int     ZOOM_MAX        = 19;     // maximum zoom value
 const int     ZOOM_MIN        = 10;     // minimum zoom value
@@ -32,6 +35,8 @@ const double DEG_LENGTH_ARRAY[] = {
     373000.0,     // Zoom level 19
     0 };          // Zoom level 20
 
+const QString FFMPEG = "ffmpeg";
+
 StdinReader::StdinReader(QObject* parent)
   : QThread ( parent )
   , mStream ( stdin, QIODevice::ReadOnly )
@@ -54,10 +59,37 @@ void StdinReader::run()
   }
 }
 
+CacheCleaner::CacheCleaner(const QString& cacheDir, QObject* parent)
+  : QThread   ( parent )
+  , mCacheDir ( cacheDir )
+{
+  setTerminationEnabled(true);
+}
+
+void CacheCleaner::run()
+{
+  while (true)
+  {
+    QDir dir(mCacheDir);
+    QStringList fileList = dir.entryList(QStringList() << "*.png", QDir::Files, QDir::Time);
+    
+    if (fileList.size() > DISK_CACHE_SIZE)
+    {
+      while (fileList.size() > DISK_CACHE_SIZE / 2)
+      {
+        qDebug() << "Removing file" << fileList.last();
+        dir.remove(fileList.last());
+        fileList.removeLast();
+      }
+    }
+    usleep(60000000);
+  }
+}
+
 QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   : QWidget          ( parent )
   , mApiKey          ( apiKey )
-  , mCacheDir        ( "/var/tmp/QGoogleMap" )
+  , mHomeDir         ( "/var/tmp/QGoogleMap" )
   , mMapType         ( "roadmap" )
   , mMapZoom         ( 18  )
   , mDegLength       ( DEG_LENGTH_ARRAY[mMapZoom] )
@@ -66,11 +98,13 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   , mTargetLatitude  ( 0.0 )
   , mTargetLongitude ( 0.0 )
   , mTargetAccuracy  ( 0.0 )
-  , mAdjustMode      ( true )
   , mAdjustTime      ( QDateTime::currentDateTime() )
   , mGpsTime         ( QDateTime::currentDateTime() )
+  , mRecordProcess   ( 0 )
 {
-  mkdir(qPrintable(mCacheDir), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  mkdir(qPrintable(mHomeDir), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  mkdir(qPrintable(mHomeDir + "/cache"), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  mkdir(qPrintable(mHomeDir + "/video"), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   
   mNetworkManager = new QNetworkAccessManager(this);
   connect(mNetworkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(onRequestFinished(QNetworkReply*)));
@@ -89,6 +123,9 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   connect(mReader, SIGNAL(readLine(QString)), this, SLOT(onReadLine(QString)));
   mReader->start();
   
+  mCacheCleaner = new CacheCleaner(mHomeDir + "/cache", this);
+  mCacheCleaner->start();
+  
   mZoomInButton = new QToolButton(this);
   mZoomInButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 30px;");
   mZoomInButton->setIcon(QIcon(":/icons/zoom_in"));
@@ -104,10 +141,22 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   connect(mZoomOutButton, SIGNAL(clicked()), this, SLOT(onZoomOut()));
   
   mAdjustButton = new QToolButton(this);
-  mAdjustButton->setStyleSheet("background-color: rgba(200,200,200,200); border-style: solid; border-radius: 30px; ");
-  mAdjustButton->setIcon(mAdjustMode ? QIcon(":/icons/adjust_mode_on") : QIcon(":/icons/adjust_mode_off"));
+  mAdjustButton->setStyleSheet("QToolButton { background-color: rgba(200,200,200,200); border-style: solid; border-radius: 30px; } "
+                               "QToolButton:checked { background-color: rgba(150,150,150,200); border-style: solid; border-radius: 30px; } ");
+  mAdjustButton->setCheckable(true);
+  mAdjustButton->setChecked(false);
   mAdjustButton->setFixedSize(60, 60);
-  connect(mAdjustButton, SIGNAL(clicked()), this, SLOT(onAdjustModeToggle()));
+  connect(mAdjustButton, SIGNAL(toggled(bool)), this, SLOT(onAdjustModeToggle()));
+  QTimer::singleShot(0, mAdjustButton, SLOT(toggle()));
+  
+  mRecordButton = new QToolButton(this);
+  mRecordButton->setIcon(QIcon(":/icons/record_start"));
+  mRecordButton->setStyleSheet("QToolButton { background-color: rgba(200,200,200,200); border-style: solid; border-radius: 30px; } "
+                               "QToolButton:checked { background-color: rgba(150,150,150,200); border-style: solid; border-radius: 30px; } ");
+  mRecordButton->setCheckable(true);
+  mRecordButton->setChecked(false);
+  mRecordButton->setFixedSize(60, 60);
+  connect(mRecordButton, SIGNAL(toggled(bool)), this, SLOT(onRecordToggle()));
 }
 
 void QGoogleMap::setTarget(double latitude, double longitude, double accuracy, double azimuth)
@@ -165,9 +214,10 @@ void QGoogleMap::resizeEvent(QResizeEvent* event)
   const int buttonHeight = mZoomInButton->height();
   const int padding      = 10;
   
-  mZoomInButton  -> move(width() - buttonWidth - 10, height() / 2 - padding / 2 - buttonHeight);
-  mZoomOutButton -> move(width() - buttonWidth - 10, height() / 2 + padding / 2);
-  mAdjustButton  -> move(width() - buttonWidth - 10, height() - padding - buttonHeight);
+  mZoomInButton  -> move(width() - buttonWidth - 10, height() / 2 - 3 * padding / 2 - 2 * buttonHeight);
+  mZoomOutButton -> move(width() - buttonWidth - 10, height() / 2 - padding / 2 - buttonHeight);
+  mAdjustButton  -> move(width() - buttonWidth - 10, height() / 2 + padding / 2);
+  mRecordButton  -> move(width() - buttonWidth - 10, height() / 2 + 3 * padding / 2 + buttonHeight);
   update();
 }
 
@@ -518,10 +568,10 @@ void QGoogleMap::refresh()
     requestMap(latitude, longitude, mMapZoom);
   }
   
-  if (mMapChunks.size() > CACHE_SIZE_MAX)
+  if (mMapChunks.size() > MEM_CACHE_SIZE)
     clearCache();
   
-  if (mAdjustMode && hasTarget())
+  if (mAdjustButton->isChecked() && hasTarget())
   {
     QDateTime timeNow = QDateTime::currentDateTime();
     if (timeNow > mAdjustTime)
@@ -615,13 +665,16 @@ void QGoogleMap::requestMap(double lat, double lon, int zoom)
   
   // Requesting cache storage
   QString fileName("%1/%2-%3.png");
-  fileName = fileName.arg(mCacheDir);
+  fileName = fileName.arg(mHomeDir + "/cache");
   fileName = fileName.arg(mMapType);
   fileName = fileName.arg(hash);
   
   QImage image;
   if (image.load(fileName))
   {
+    // Updating file timestamp
+    utime(qPrintable(fileName), 0);
+    
     MapChunk chunk;
     chunk.type = mMapType;
     chunk.zoom = zoom;
@@ -677,7 +730,7 @@ void QGoogleMap::onRequestFinished(QNetworkReply* reply)
       
       // Caching file
       QString fileName("%1/%2-%3.png");
-      fileName = fileName.arg(mCacheDir);
+      fileName = fileName.arg(mHomeDir + "/cache");
       fileName = fileName.arg(mMapType);
       fileName = fileName.arg(hash);
       
@@ -688,8 +741,15 @@ void QGoogleMap::onRequestFinished(QNetworkReply* reply)
         f.close();
       }
       
-      //QDir dir(mCacheDir);
-      //QStringList fileList = dir.entryList(QDir::Files, );
+      //QDir dir(mHomeDir + "/cache");
+      //QStringList fileList = dir.entryList(QStringList() << "*.png", QDir::Files, QDir::Time);
+      //while (fileList.size() > DISK_CACHE_SIZE)
+      //{
+      //  //qDebug() << "Removing" << fileList.back();
+      //  //dir.remove(fileList.back());
+      //  dir.rename(fileList.last(), fileList.last() + ".tmp");
+      //  fileList.removeLast();
+      //}
       
       QImage image;
       if (image.loadFromData(data))
@@ -806,9 +866,49 @@ void QGoogleMap::onReadLine(QString line)
 
 void QGoogleMap::onAdjustModeToggle()
 {
-  mAdjustMode = !mAdjustMode;
   mAdjustTime = QDateTime::currentDateTime();
-  mAdjustButton->setIcon(mAdjustMode ? QIcon(":/icons/adjust_mode_on") : QIcon(":/icons/adjust_mode_off"));
+  mAdjustButton->setIcon(mAdjustButton->isChecked() ? QIcon(":/icons/adjust_mode_on") : QIcon(":/icons/adjust_mode_off"));
+}
+
+void QGoogleMap::onRecordToggle()
+{
+  mRecordButton->setIcon(mRecordButton->isChecked() ? QIcon(":/icons/record_stop") : QIcon(":/icons/record_start"));
+  
+  if (!mRecordProcess)
+  {
+    // Creating new process
+    QString fileName("%1/%2.mp4");
+    fileName = fileName.arg(mHomeDir + "/video");
+    fileName = fileName.arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
+    qDebug() << "Start recording video" << fileName;
+    
+    QPoint P = this->mapToGlobal(QPoint(0,0));
+    QString command("%1 -f x11grab -r 25 -i :0.0+%2,%3 -s %4,%5 -vcodec h264 %6");
+    command = command.arg(FFMPEG);
+    command = command.arg(P.x());
+    command = command.arg(P.y());
+    command = command.arg(width());
+    command = command.arg(height());
+    command = command.arg(fileName);
+    
+    mRecordProcess = new QProcess(this);
+    mRecordProcess->start(command);
+    connect(mRecordProcess, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(onRecordFinished()));
+  }
+  else
+  {
+    // Stopping existing process
+    qDebug() << "Stop recording video";
+    kill(mRecordProcess->pid(), SIGINT);
+    mRecordButton->blockSignals(true);
+  }
+}
+
+void QGoogleMap::onRecordFinished()
+{
+  mRecordButton->blockSignals(false);
+  delete mRecordProcess;
+  mRecordProcess = 0;
 }
 
 int main(int argc, char** argv)
