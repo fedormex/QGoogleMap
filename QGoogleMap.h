@@ -112,6 +112,8 @@ class QGoogleMap: public QWidget
     QToolButton*                  mRecordButton;
     
     QProcess*                     mRecordProcess;
+    QString                       mRecordVideoFile;
+    QString                       mRecordLogFile;
 };
 
 #endif

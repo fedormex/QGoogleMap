@@ -105,6 +105,7 @@ QGoogleMap::QGoogleMap(const QString& apiKey, QWidget* parent)
   mkdir(qPrintable(mHomeDir), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   mkdir(qPrintable(mHomeDir + "/cache"), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   mkdir(qPrintable(mHomeDir + "/video"), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  mkdir(qPrintable(mHomeDir + "/logs"),  S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   
   mNetworkManager = new QNetworkAccessManager(this);
   connect(mNetworkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(onRequestFinished(QNetworkReply*)));
@@ -292,7 +293,6 @@ void QGoogleMap::paintEvent(QPaintEvent* event)
     // Drawing track
     if (!mTargetHistory.isEmpty())
     {
-      qDebug() << mTargetHistory.size();
       QPainterPath path;
       for(int i = 0; i < mTargetHistory.size(); ++i)
       {
@@ -860,6 +860,21 @@ void QGoogleMap::onReadLine(QString line)
     
     setInfoText(text);
     
+    if (!mRecordLogFile.isEmpty())
+    {
+      QFile f(mRecordLogFile);
+      if (f.open(QIODevice::Append))
+      {
+        QString text("%1 %2 %3 %4\n");
+        text = text.arg(timeNow.toString("yyyy-MM-dd hh:mm:ss.zzz"));
+        text = text.arg(latitude,  0, 'f', 6);
+        text = text.arg(longitude, 0, 'f', 6);
+        text = text.arg(gpsDelta / 1000);
+        f.write(text.toUtf8());
+        f.close();
+      }
+    }
+    
     //qDebug() << qPrintable(text) << "\n";
   }
 }
@@ -876,20 +891,27 @@ void QGoogleMap::onRecordToggle()
   
   if (!mRecordProcess)
   {
+    QDateTime timeNow = QDateTime::currentDateTime();
     // Creating new process
-    QString fileName("%1/%2.mp4");
-    fileName = fileName.arg(mHomeDir + "/video");
-    fileName = fileName.arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
-    qDebug() << "Start recording video" << fileName;
+    mRecordVideoFile = QString("%1/%2.mp4");
+    mRecordVideoFile = mRecordVideoFile.arg(mHomeDir + "/video");
+    mRecordVideoFile = mRecordVideoFile.arg(timeNow.toString("yyyyMMdd_hhmmss"));
+    
+    mRecordLogFile = QString("%1/%2.log");
+    mRecordLogFile = mRecordLogFile.arg(mHomeDir + "/logs");
+    mRecordLogFile = mRecordLogFile.arg(timeNow.toString("yyyyMMdd_hhmmss"));
+    
+    qDebug() << "Start recording video" << mRecordVideoFile;
+    qDebug() << "Start recording video" << mRecordVideoFile;
     
     QPoint P = this->mapToGlobal(QPoint(0,0));
-    QString command("%1 -f x11grab -r 25 -i :0.0+%2,%3 -s %4,%5 -vcodec h264 %6");
+    QString command("%1 -f x11grab -r 25 -s %2x%3 -i :0.0+%4,%5 -vcodec h264 %6");
     command = command.arg(FFMPEG);
-    command = command.arg(P.x());
-    command = command.arg(P.y());
     command = command.arg(width());
     command = command.arg(height());
-    command = command.arg(fileName);
+    command = command.arg(P.x());
+    command = command.arg(P.y());
+    command = command.arg(mRecordVideoFile);
     
     mRecordProcess = new QProcess(this);
     mRecordProcess->start(command);
@@ -898,9 +920,11 @@ void QGoogleMap::onRecordToggle()
   else
   {
     // Stopping existing process
-    qDebug() << "Stop recording video";
+    qDebug() << "Stop recording video" << mRecordVideoFile;
     kill(mRecordProcess->pid(), SIGINT);
     mRecordButton->blockSignals(true);
+    mRecordVideoFile.clear();
+    mRecordLogFile.clear();
   }
 }
 
